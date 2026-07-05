@@ -7,10 +7,11 @@ edition = "2024"
 name = "nbtq"
 
 [dependencies]
-nbtq = { path = "../nbtq" }
+nbtq = { path = "../nbtq", features = ["colours"] }
 jaq-core = "3"
 jaq-std = "3"
 fastnbt = "2"
 fastsnbt = "0.2.1"
 flate2 = "1.1.9"
 anyhow = "1.0.102"
+valence_nbt = { version = "0.8.0", features = ["binary", "snbt"] }

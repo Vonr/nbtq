@@ -1,30 +1,34 @@
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write};
 
 use anyhow::Context;
-use fastnbt::Value;
 use flate2::write::GzDecoder;
 use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{Ctx, Vars, data, unwrap_valr};
 use nbtq::Val;
+use nbtq::print::WriterStyles;
+use valence_nbt::Value;
 
 fn main() {
     let mut args = std::env::args();
     let _name = args.next().unwrap();
-    let code = args.next().unwrap();
+    let code = args.next().unwrap_or_else(|| ".".to_string());
 
     let mut input = Vec::new();
     std::io::stdin().lock().read_to_end(&mut input).unwrap();
 
-    let input: Value = fastnbt::from_bytes(&input)
+    let input: Value = valence_nbt::from_binary(&mut input.as_slice())
+        .map(|v| Value::Compound(v.0))
         .or_else(|_| {
             let decoded = Vec::new();
             let mut decoder = GzDecoder::new(decoded);
             decoder.write_all(&input)?;
             input = decoder.finish().context("gzip decode failure")?;
-            fastnbt::from_bytes(&input).context("failed post-ungzip parse")
+            valence_nbt::from_binary(&mut input.as_slice())
+                .map(|v| Value::Compound(v.0))
+                .context("failed post-ungzip parse")
         })
         .or_else(|_| {
-            fastsnbt::from_str::<Value>(
+            valence_nbt::snbt::from_snbt_str(
                 std::str::from_utf8(&input)
                     .context("failed utf8 check after non-stringified failures")?
                     .trim_ascii_end(),
@@ -57,7 +61,18 @@ fn main() {
 
     for value in out {
         match value {
-            Ok(v) => println!("{v}"),
+            Ok(v) => println!(
+                "{}",
+                nbtq::print::to_snbt_string(
+                    &v.0,
+                    nbtq::print::WriterOptions {
+                        pretty: true,
+                        styles: std::io::stdout().is_terminal().then(WriterStyles::default),
+                        ..Default::default()
+                    }
+                )
+                .unwrap()
+            ),
             Err(e) => eprintln!("{e}"),
         }
     }

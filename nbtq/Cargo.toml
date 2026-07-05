@@ -5,6 +5,11 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
-fastnbt = "2.6.1"
 jaq-core = "3.1.0"
 jaq-std = "3.0.1"
+valence_nbt = { version = "0.8.0", features = ["binary", "snbt"] }
+owo-colors = { version = "4.3.0", optional = true, features = ["supports-colors"] }
+cfg-if = "1.0.4"
+
+[features]
+colours = ["dep:owo-colors"]
