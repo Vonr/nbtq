@@ -1,0 +1,13 @@
+[package]
+name = "nbtq-cli"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+nbtq = { path = "../nbtq" }
+jaq-core = "3"
+jaq-std = "3"
+fastnbt = "2"
+fastsnbt = "0.2.1"
+flate2 = "1.1.9"
+anyhow = "1.0.102"
