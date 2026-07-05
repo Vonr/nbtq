@@ -19,10 +19,6 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 pub struct Val(pub valence_nbt::Value);
 
 impl Val {
-    pub fn discriminant(&self) -> usize {
-        self.0.tag() as usize
-    }
-
     pub fn len(&self) -> Option<usize> {
         match &self.0 {
             valence_nbt::Value::String(s) => Some(s.len()),
@@ -113,9 +109,9 @@ impl Ord for Val {
     fn cmp(&self, other: &Self) -> Ordering {
         use valence_nbt::Value::*;
 
-        let discriminant = self.discriminant().cmp(&other.discriminant());
-        if discriminant != Ordering::Equal {
-            return discriminant;
+        let tag = self.0.tag().cmp(&other.0.tag());
+        if tag != Ordering::Equal {
+            return tag;
         }
 
         match (&self.0, &other.0) {
@@ -196,12 +192,12 @@ impl FromIterator<Self> for Val {
     fn from_iter<T: IntoIterator<Item = Self>>(iter: T) -> Self {
         let mut list = VList::new();
         for value in iter {
-            let ty = std::mem::discriminant(&value.0);
+            let ty = value.0.tag();
 
             if !list.try_push(value.0) {
                 panic!(
                     "tried to insert {ty:?} into list of type {:?}",
-                    std::mem::discriminant(&list)
+                    list.element_tag()
                 )
             }
         }
@@ -275,24 +271,22 @@ impl core::ops::Add for Val {
                 s.push_str(&b);
                 Str(s)
             }
-            (List(a), List(b)) if std::mem::discriminant(&a) == std::mem::discriminant(&b) => {
-                List(match (a, b) {
-                    (VList::End, VList::End) => VList::End,
-                    (VList::Byte(a), VList::Byte(b)) => concatl(a, &b).into(),
-                    (VList::Short(a), VList::Short(b)) => concatl(a, &b).into(),
-                    (VList::Int(a), VList::Int(b)) => concatl(a, &b).into(),
-                    (VList::Long(a), VList::Long(b)) => concatl(a, &b).into(),
-                    (VList::Float(a), VList::Float(b)) => concatl(a, &b).into(),
-                    (VList::Double(a), VList::Double(b)) => concatl(a, &b).into(),
-                    (VList::ByteArray(a), VList::ByteArray(b)) => concatl(a, &b).into(),
-                    (VList::String(a), VList::String(b)) => concatl(a, &b).into(),
-                    (VList::List(a), VList::List(b)) => concatl(a, &b).into(),
-                    (VList::Compound(a), VList::Compound(b)) => concatl(a, &b).into(),
-                    (VList::IntArray(a), VList::IntArray(b)) => concatl(a, &b).into(),
-                    (VList::LongArray(a), VList::LongArray(b)) => concatl(a, &b).into(),
-                    _ => unreachable!(),
-                })
-            }
+            (List(a), List(b)) if a.element_tag() == b.element_tag() => List(match (a, b) {
+                (VList::End, VList::End) => VList::End,
+                (VList::Byte(a), VList::Byte(b)) => concatl(a, &b).into(),
+                (VList::Short(a), VList::Short(b)) => concatl(a, &b).into(),
+                (VList::Int(a), VList::Int(b)) => concatl(a, &b).into(),
+                (VList::Long(a), VList::Long(b)) => concatl(a, &b).into(),
+                (VList::Float(a), VList::Float(b)) => concatl(a, &b).into(),
+                (VList::Double(a), VList::Double(b)) => concatl(a, &b).into(),
+                (VList::ByteArray(a), VList::ByteArray(b)) => concatl(a, &b).into(),
+                (VList::String(a), VList::String(b)) => concatl(a, &b).into(),
+                (VList::List(a), VList::List(b)) => concatl(a, &b).into(),
+                (VList::Compound(a), VList::Compound(b)) => concatl(a, &b).into(),
+                (VList::IntArray(a), VList::IntArray(b)) => concatl(a, &b).into(),
+                (VList::LongArray(a), VList::LongArray(b)) => concatl(a, &b).into(),
+                _ => unreachable!(),
+            }),
             (a @ ByteArray(_), List(VList::End)) => a,
             (a @ IntArray(_), List(VList::End)) => a,
             (a @ LongArray(_), List(VList::End)) => a,
@@ -431,24 +425,22 @@ impl core::ops::Sub for Val {
             (Double(a), Long(b)) => Double(a - b as f64),
             (Double(a), Float(b)) => Double(a - b as f64),
             (Double(a), Double(b)) => Double(a - b),
-            (List(a), List(b)) if std::mem::discriminant(&a) == std::mem::discriminant(&b) => {
-                List(match (a, b) {
-                    (VList::End, VList::End) => VList::End,
-                    (VList::Byte(a), VList::Byte(b)) => list(&a, &b).into(),
-                    (VList::Short(a), VList::Short(b)) => list(&a, &b).into(),
-                    (VList::Int(a), VList::Int(b)) => list(&a, &b).into(),
-                    (VList::Long(a), VList::Long(b)) => list(&a, &b).into(),
-                    (VList::Float(a), VList::Float(b)) => partial_list(&a, &b).into(),
-                    (VList::Double(a), VList::Double(b)) => partial_list(&a, &b).into(),
-                    (VList::ByteArray(a), VList::ByteArray(b)) => list(&a, &b).into(),
-                    (VList::String(a), VList::String(b)) => list(&a, &b).into(),
-                    (VList::List(a), VList::List(b)) => partial_list(&a, &b).into(),
-                    (VList::Compound(a), VList::Compound(b)) => partial_list(&a, &b).into(),
-                    (VList::IntArray(a), VList::IntArray(b)) => list(&a, &b).into(),
-                    (VList::LongArray(a), VList::LongArray(b)) => list(&a, &b).into(),
-                    _ => unreachable!(),
-                })
-            }
+            (List(a), List(b)) if a.element_tag() == b.element_tag() => List(match (a, b) {
+                (VList::End, VList::End) => VList::End,
+                (VList::Byte(a), VList::Byte(b)) => list(&a, &b).into(),
+                (VList::Short(a), VList::Short(b)) => list(&a, &b).into(),
+                (VList::Int(a), VList::Int(b)) => list(&a, &b).into(),
+                (VList::Long(a), VList::Long(b)) => list(&a, &b).into(),
+                (VList::Float(a), VList::Float(b)) => partial_list(&a, &b).into(),
+                (VList::Double(a), VList::Double(b)) => partial_list(&a, &b).into(),
+                (VList::ByteArray(a), VList::ByteArray(b)) => list(&a, &b).into(),
+                (VList::String(a), VList::String(b)) => list(&a, &b).into(),
+                (VList::List(a), VList::List(b)) => partial_list(&a, &b).into(),
+                (VList::Compound(a), VList::Compound(b)) => partial_list(&a, &b).into(),
+                (VList::IntArray(a), VList::IntArray(b)) => list(&a, &b).into(),
+                (VList::LongArray(a), VList::LongArray(b)) => list(&a, &b).into(),
+                _ => unreachable!(),
+            }),
             (a @ List(VList::End), ByteArray(_)) => a,
             (a @ List(VList::End), IntArray(_)) => a,
             (a @ List(VList::End), LongArray(_)) => a,
@@ -907,12 +899,12 @@ impl jaq_core::ValT for Val {
             List(v) => {
                 let mut list = VList::new();
                 for value in v.into_iter().take(end).skip(start) {
-                    let ty = std::mem::discriminant(&value);
+                    let ty = value.tag();
 
                     if !list.try_push(value) {
                         panic!(
                             "tried to insert {ty:?} into list of type {:?}",
-                            std::mem::discriminant(&list)
+                            list.element_tag()
                         )
                     }
                 }
@@ -937,13 +929,13 @@ impl jaq_core::ValT for Val {
                 for value in v.iter().copied().map(Byte).map(Val).flat_map(f) {
                     match value {
                         Ok(value) => {
-                            let ty = std::mem::discriminant(&value.0);
+                            let ty = value.0.tag();
 
                             if !list.try_push(value.0) {
                                 return opt.fail(Val(ByteArray(v)), |_| {
                                     Exn::from(jaq_core::Error::str(format_args!(
                                         "tried to insert {ty:?} into list of type {:?}",
-                                        std::mem::discriminant(&list)
+                                        list.element_tag()
                                     )))
                                 });
                             }
@@ -960,13 +952,13 @@ impl jaq_core::ValT for Val {
                 for value in v.iter().copied().map(Int).map(Val).flat_map(f) {
                     match value {
                         Ok(value) => {
-                            let ty = std::mem::discriminant(&value.0);
+                            let ty = value.0.tag();
 
                             if !list.try_push(value.0) {
                                 return opt.fail(Val(IntArray(v)), |_| {
                                     Exn::from(jaq_core::Error::str(format_args!(
                                         "tried to insert {ty:?} into list of type {:?}",
-                                        std::mem::discriminant(&list)
+                                        list.element_tag()
                                     )))
                                 });
                             }
@@ -983,13 +975,13 @@ impl jaq_core::ValT for Val {
                 for value in v.iter().copied().map(Long).map(Val).flat_map(f) {
                     match value {
                         Ok(value) => {
-                            let ty = std::mem::discriminant(&value.0);
+                            let ty = value.0.tag();
 
                             if !list.try_push(value.0) {
                                 return opt.fail(Val(LongArray(v)), |_| {
                                     Exn::from(jaq_core::Error::str(format_args!(
                                         "tried to insert {ty:?} into list of type {:?}",
-                                        std::mem::discriminant(&list)
+                                        list.element_tag()
                                     )))
                                 });
                             }
@@ -1006,13 +998,13 @@ impl jaq_core::ValT for Val {
                 for value in v.iter().map(|e| Val(e.into())).flat_map(f) {
                     match value {
                         Ok(value) => {
-                            let ty = std::mem::discriminant(&value.0);
+                            let ty = value.0.tag();
 
                             if !list.try_push(value.0) {
                                 return opt.fail(Val(List(v)), |_| {
                                     Exn::from(jaq_core::Error::str(format_args!(
                                         "tried to insert {ty:?} into list of type {:?}",
-                                        std::mem::discriminant(&list)
+                                        list.element_tag()
                                     )))
                                 });
                             }
