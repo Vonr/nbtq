@@ -41,6 +41,7 @@ pub struct WriterStyles {
     pub keys: Style,
     pub primitives: Style,
     pub primitive_postfix: Style,
+    pub list_prefix: Style,
 }
 
 #[cfg(feature = "colours")]
@@ -52,7 +53,8 @@ impl Default for WriterStyles {
             strings: style().green(),
             keys: style().bright_blue().bold(),
             primitives: style().purple(),
-            primitive_postfix: style().purple().bold(),
+            primitive_postfix: style().yellow().bold(),
+            list_prefix: style().yellow().bold(),
         }
     }
 }
@@ -159,7 +161,12 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
 
         self.output.write_char('[')?;
         if self.options.prefix_lists {
-            self.output.write_str(prefix)?;
+            if let Some(styles) = self.options.styles() {
+                self.output
+                    .write_str(&prefix.style(styles.list_prefix).to_string())?;
+            } else {
+                self.output.write_str(prefix)?;
+            }
         }
 
         self.options.depth += 1;
