@@ -1014,11 +1014,16 @@ impl jaq_core::ValT for Val {
                     });
                 };
                 match f(Val(Byte(e))).next().transpose() {
-                    Ok(Some(v)) => Ok(v),
+                    Ok(Some(Val(Byte(e)))) => {
+                        let mut bm = v.to_vec();
+                        bm[idx] = e.cast_unsigned();
+                        Ok(Val(ByteArray(bm.into())))
+                    }
+                    Ok(Some(e)) => opt.fail(self, |_| Exn::from(jaq_core::Error::typ(e, "Long"))),
                     Ok(None) => {
                         let mut bm = v.to_vec();
                         bm.remove(idx);
-                        Ok(Val(ByteArray(Bytes::from(bm))))
+                        Ok(Val(ByteArray(bm.into())))
                     }
                     Err(e) => opt.fail(self, |_| e),
                 }
@@ -1031,7 +1036,11 @@ impl jaq_core::ValT for Val {
                 };
                 let e = std::mem::take(mr);
                 match f(Val(Int(e))).next().transpose() {
-                    Ok(Some(v)) => Ok(v),
+                    Ok(Some(Val(Int(e)))) => {
+                        v[idx] = e;
+                        Ok(Val(IntArray(v)))
+                    }
+                    Ok(Some(e)) => opt.fail(self, |_| Exn::from(jaq_core::Error::typ(e, "Long"))),
                     Ok(None) => {
                         v.remove(idx);
                         Ok(Val(IntArray(v)))
@@ -1047,7 +1056,11 @@ impl jaq_core::ValT for Val {
                 };
                 let e = std::mem::take(mr);
                 match f(Val(Long(e))).next().transpose() {
-                    Ok(Some(v)) => Ok(v),
+                    Ok(Some(Val(Long(e)))) => {
+                        v[idx] = e;
+                        Ok(Val(LongArray(v)))
+                    }
+                    Ok(Some(e)) => opt.fail(self, |_| Exn::from(jaq_core::Error::typ(e, "Long"))),
                     Ok(None) => {
                         v.remove(idx);
                         Ok(Val(LongArray(v)))
@@ -1056,13 +1069,16 @@ impl jaq_core::ValT for Val {
                 }
             }
             (List(mut v), idx) if let Ok(idx) = idx.maybe_usize() => {
-                let Some(e) = v.get(idx) else {
+                let Some(e) = v.replace(idx, NbtTag::End) else {
                     return opt.fail(self, |_| {
                         Exn::from(Error::index(Val(List(v)), Val(Int(idx as i32))))
                     });
                 };
-                match f(Val(e.clone())).next().transpose() {
-                    Ok(Some(v)) => Ok(v),
+                match f(Val(e)).next().transpose() {
+                    Ok(Some(e)) => {
+                        v.replace(idx, e.0).unwrap();
+                        Ok(Val(List(v)))
+                    }
                     Ok(None) => {
                         v.remove(idx);
                         Ok(Val(List(v)))
@@ -1071,14 +1087,23 @@ impl jaq_core::ValT for Val {
                 }
             }
             (Compound(mut map), Val(String(k))) => {
-                let Some(v) = map.get(k) else {
+                let Some(idx) = map.child_tags.iter().position(|t| &t.0 == k) else {
                     return opt.fail(self, |_| {
                         Exn::from(Error::index(Val(Compound(map)), Val(String(k.to_string()))))
                     });
                 };
 
-                match f(Val(v.clone())).next().transpose() {
-                    Ok(Some(v)) => Ok(v),
+                match f(Val(std::mem::replace(
+                    &mut map.child_tags[idx].1,
+                    NbtTag::End,
+                )))
+                .next()
+                .transpose()
+                {
+                    Ok(Some(v)) => {
+                        map.child_tags[idx].1 = v.0;
+                        Ok(Val(Compound(map)))
+                    }
                     Ok(None) => {
                         map.child_tags.retain(|(ok, _)| k != ok);
                         Ok(Val(Compound(map)))
