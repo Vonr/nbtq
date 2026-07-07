@@ -1,6 +1,8 @@
 use std::io::{IsTerminal, Read, Write};
 
 use anyhow::Context;
+pub use anyhow::{Error, Result};
+use clap::Parser;
 use flate2::write::GzDecoder;
 use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{Ctx, Vars, data, unwrap_valr};
@@ -8,13 +10,25 @@ use nbtq::Val;
 use nbtq::print::WriterStyles;
 use valence_nbt::Value;
 
-fn main() {
-    let mut args = std::env::args();
-    let _name = args.next().unwrap();
-    let code = args.next().unwrap_or_else(|| ".".to_string());
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    code: String,
+    path: Option<String>,
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
 
     let mut input = Vec::new();
-    std::io::stdin().lock().read_to_end(&mut input).unwrap();
+    if let Some(path) = args.path
+        && path != "-"
+    {
+        let mut file = std::fs::OpenOptions::new().read(true).open(path)?;
+        file.read_to_end(&mut input)?;
+    } else {
+        std::io::stdin().lock().read_to_end(&mut input)?;
+    }
 
     let input: Value = valence_nbt::from_binary(&mut input.as_slice())
         .map(|v| Value::Compound(v.0))
@@ -39,7 +53,7 @@ fn main() {
     let input = Val(input);
 
     let program = File {
-        code: code.as_str(),
+        code: args.code.as_str(),
         path: (),
     };
 
@@ -70,10 +84,11 @@ fn main() {
                         styles: std::io::stdout().is_terminal().then(WriterStyles::default),
                         ..Default::default()
                     }
-                )
-                .unwrap()
+                )?
             ),
             Err(e) => eprintln!("{e}"),
         }
     }
+
+    Ok(())
 }
