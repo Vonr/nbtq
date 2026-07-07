@@ -249,14 +249,14 @@ impl core::ops::Add for Val {
         use jaq_core::Error;
 
         fn concatl<T: Into<NbtTag>>(mut a: NbtList, b: impl IntoIterator<Item = T>) -> NbtTag {
-            a.extend(b);
+            a.extend(b.into_iter().map(Into::into));
             List(a)
         }
 
         fn concatr<T: Into<NbtTag>>(a: impl IntoIterator<Item = T>, b: NbtList) -> NbtTag {
             let iter = a.into_iter();
             let mut list = NbtList::with_capacity(iter.size_hint().0 + b.len());
-            list.extend(iter);
+            list.extend(iter.map(Into::into));
             list.extend(b);
             List(list)
         }
