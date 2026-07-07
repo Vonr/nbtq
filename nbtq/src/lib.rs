@@ -1,6 +1,6 @@
 pub mod print;
 
-use std::{cmp::Ordering, collections::HashSet, fmt::Debug};
+use std::{cmp::Ordering, collections::HashSet, fmt::Debug, io::Read, ops::RangeBounds};
 
 pub use anyhow::Error;
 use anyhow::anyhow;
@@ -34,14 +34,21 @@ impl Val {
     pub fn is_empty(&self) -> bool {
         self.len().is_some_and(|len| len == 0)
     }
+
+    fn range_int(
+        range: jaq_core::val::Range<&Self>,
+    ) -> Result<jaq_core::val::Range<usize>, jaq_core::Error<Val>> {
+        let f = |i: Option<&Self>| i.as_ref().map(|i| i.maybe_usize()).transpose();
+        Ok(f(range.start)?..f(range.end)?)
+    }
 }
 
 pub trait NbtExtension {
-    fn maybe_i64(&self) -> Result<i64>;
+    type Error;
 
-    fn maybe_usize(&self) -> Result<usize> {
-        Ok(usize::try_from(self.maybe_i64()?)?)
-    }
+    fn maybe_i64(&self) -> Result<i64, Self::Error>;
+
+    fn maybe_usize(&self) -> Result<usize, Self::Error>;
 
     fn len(&self) -> Option<usize>;
 
@@ -51,7 +58,9 @@ pub trait NbtExtension {
 }
 
 impl NbtExtension for valence_nbt::Value {
-    fn maybe_i64(&self) -> Result<i64> {
+    type Error = crate::Error;
+
+    fn maybe_i64(&self) -> Result<i64, Self::Error> {
         match self {
             valence_nbt::Value::Byte(v) => Ok(*v as i64),
             valence_nbt::Value::Short(v) => Ok(*v as i64),
@@ -75,6 +84,30 @@ impl NbtExtension for valence_nbt::Value {
         }
     }
 
+    fn maybe_usize(&self) -> Result<usize, Self::Error> {
+        match self {
+            valence_nbt::Value::Byte(v) => Ok(*v as usize),
+            valence_nbt::Value::Short(v) => Ok(*v as usize),
+            valence_nbt::Value::Int(v) => Ok(*v as usize),
+            valence_nbt::Value::Long(v) => Ok((*v).try_into()?),
+            valence_nbt::Value::Float(v) => {
+                if *v == (*v as usize) as f32 {
+                    Ok(*v as usize)
+                } else {
+                    Err(anyhow!("f32 conversion would be lossy"))
+                }
+            }
+            valence_nbt::Value::Double(v) => {
+                if *v == (*v as usize) as f64 {
+                    Ok(*v as usize)
+                } else {
+                    Err(anyhow!("f64 conversion would be lossy"))
+                }
+            }
+            _ => Err(anyhow!("not a numeric type")),
+        }
+    }
+
     fn len(&self) -> Option<usize> {
         Some(match self {
             valence_nbt::Value::ByteArray(v) => v.len(),
@@ -89,8 +122,18 @@ impl NbtExtension for valence_nbt::Value {
 }
 
 impl NbtExtension for Val {
-    fn maybe_i64(&self) -> Result<i64> {
-        self.0.maybe_i64()
+    type Error = jaq_core::Error<Val>;
+
+    fn maybe_i64(&self) -> Result<i64, Self::Error> {
+        self.0
+            .maybe_i64()
+            .map_err(|_| jaq_core::Error::typ(self.clone(), "Num"))
+    }
+
+    fn maybe_usize(&self) -> Result<usize, Self::Error> {
+        self.0
+            .maybe_usize()
+            .map_err(|_| jaq_core::Error::typ(self.clone(), "Num"))
     }
 
     fn len(&self) -> Option<usize> {
@@ -654,7 +697,7 @@ impl core::ops::Neg for Val {
             Long(n) => Long(-n),
             Float(n) => Float(-n),
             Double(n) => Double(-n),
-            n => return Err(Error::typ(Val(n), "number")),
+            n => return Err(Error::typ(Val(n), "Num")),
         }))
     }
 }
@@ -1131,7 +1174,96 @@ impl jaq_core::ValT for Val {
         opt: jaq_core::path::Opt,
         f: impl Fn(Self) -> I,
     ) -> jaq_core::ValX<'a, Self> {
-        todo!()
+        use valence_nbt::Value;
+
+        let (start, end) = match Self::range_int(range) {
+            Ok(range) => (range.start, range.end),
+            Err(e) => return opt.fail(self, |_| Exn::from(e)),
+        };
+
+        match self.0 {
+            Value::String(s) => {
+                let s = match (start, end) {
+                    (None, None) => s,
+                    (None, Some(end)) => s[..end].to_string(),
+                    (Some(start), None) => s[start..].to_string(),
+                    (Some(start), Some(end)) => s[start..end].to_string(),
+                };
+                let y = f(Val(Value::String(s))).next();
+                Ok(y.transpose()?
+                    .unwrap_or_else(|| Val(Value::String(String::new()))))
+            }
+            Value::ByteArray(v) | Value::List(VList::Byte(v)) => {
+                let v = match (start, end) {
+                    (None, None) => v,
+                    (None, Some(end)) => v[..end].to_vec(),
+                    (Some(start), None) => v[start..].to_vec(),
+                    (Some(start), Some(end)) => v[start..end].to_vec(),
+                };
+                let y = f(Val(Value::ByteArray(v))).next();
+                Ok(y.transpose()?
+                    .unwrap_or_else(|| Val(Value::ByteArray(Vec::new()))))
+            }
+            Value::IntArray(v) | Value::List(VList::Int(v)) => {
+                let v = match (start, end) {
+                    (None, None) => v,
+                    (None, Some(end)) => v[..end].to_vec(),
+                    (Some(start), None) => v[start..].to_vec(),
+                    (Some(start), Some(end)) => v[start..end].to_vec(),
+                };
+                let y = f(Val(Value::IntArray(v))).next();
+                Ok(y.transpose()?
+                    .unwrap_or_else(|| Val(Value::IntArray(Vec::new()))))
+            }
+            Value::LongArray(v) | Value::List(VList::Long(v)) => {
+                let v = match (start, end) {
+                    (None, None) => v,
+                    (None, Some(end)) => v[..end].to_vec(),
+                    (Some(start), None) => v[start..].to_vec(),
+                    (Some(start), Some(end)) => v[start..end].to_vec(),
+                };
+                let y = f(Val(Value::LongArray(v))).next();
+                Ok(y.transpose()?
+                    .unwrap_or_else(|| Val(Value::LongArray(Vec::new()))))
+            }
+            Value::List(v) => {
+                let v = match (start, end) {
+                    (None, None) => v,
+                    (None, Some(end)) => {
+                        let end = v.len().min(end);
+                        let mut vec = VList::new();
+                        for i in 0..end {
+                            if !vec.try_push(v.get(i).unwrap().to_value()) {
+                                panic!();
+                            }
+                        }
+                        vec
+                    }
+                    (Some(start), None) => {
+                        let mut vec = VList::new();
+                        for i in start..v.len() {
+                            if !vec.try_push(v.get(i).unwrap().to_value()) {
+                                panic!();
+                            }
+                        }
+                        vec
+                    }
+                    (Some(start), Some(end)) => {
+                        let end = v.len().min(end);
+                        let mut vec = VList::new();
+                        for i in start..end {
+                            if !vec.try_push(v.get(i).unwrap().to_value()) {
+                                panic!();
+                            }
+                        }
+                        vec
+                    }
+                };
+                let y = f(Val(Value::List(v))).next();
+                Ok(y.transpose()?.unwrap_or(Val(Value::List(VList::End))))
+            }
+            _ => opt.fail(self, |v| Exn::from(jaq_core::Error::typ(v, "List"))),
+        }
     }
 
     fn as_bool(&self) -> bool {
@@ -1197,13 +1329,20 @@ impl jaq_std::ValT for Val {
     }
 
     fn as_sub_str(&self, sub: &[u8]) -> Self {
-        if let valence_nbt::Value::String(s) = &self.0
-            && let Some(range) = s.as_bytes().subslice_range(sub)
+        if !sub.is_empty()
+            && let valence_nbt::Value::String(s) = &self.0
         {
-            Val(valence_nbt::Value::String(s[range].to_string()))
-        } else {
-            self.clone()
+            let bytes = s.as_bytes();
+            for window in bytes.windows(sub.len()) {
+                if window == sub {
+                    return Val(valence_nbt::Value::String(
+                        std::str::from_utf8(bytes).unwrap().to_string(),
+                    ));
+                }
+            }
         }
+
+        panic!()
     }
 
     fn from_utf8_bytes(b: impl AsRef<[u8]> + Send + 'static) -> Self {
