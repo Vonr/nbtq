@@ -12,6 +12,7 @@ cargo install --git http://github.com/Vonr/nbtq --locked
 
 ```
 # Subject to change
-nbtq '.' < /path/to/nbt.dat
-echo '{cant:have,spaces:"in between tokens"}' | nbtq '.'
+nbtq '.' /path/to/nbt.dat
+nbtq '.' - < /path/to/nbt.dat
+echo '{"compound": ["string", 42b, 42s, 42, 42L, [I; 1, 2, 3, 4]]}' | nbtq '.'
 ```
