@@ -10,8 +10,6 @@ name = "nbtq"
 nbtq = { path = "../nbtq", features = ["colours"] }
 jaq-core = "3"
 jaq-std = "3"
-fastnbt = "2"
-fastsnbt = "0.2.1"
 flate2 = "1.1.9"
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
