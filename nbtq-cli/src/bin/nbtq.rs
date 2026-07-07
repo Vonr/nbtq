@@ -7,8 +7,8 @@ use flate2::write::GzDecoder;
 use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{Ctx, Vars, data, unwrap_valr};
 use nbtq::Val;
+use nbtq::nbt::{Nbt, NbtTag};
 use nbtq::print::WriterStyles;
-use valence_nbt::Value;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -30,24 +30,23 @@ fn main() -> Result<()> {
         std::io::stdin().lock().read_to_end(&mut input)?;
     }
 
-    let input: Value = valence_nbt::from_binary(&mut input.as_slice())
-        .map(|v| Value::Compound(v.0))
+    let input = Nbt::read(&mut input.as_slice())
+        .map(|n| NbtTag::Compound(n.root_tag))
         .or_else(|_| {
             let decoded = Vec::new();
             let mut decoder = GzDecoder::new(decoded);
             decoder.write_all(&input)?;
             input = decoder.finish().context("gzip decode failure")?;
-            valence_nbt::from_binary(&mut input.as_slice())
-                .map(|v| Value::Compound(v.0))
+            Nbt::read(&mut input.as_slice())
+                .map(|n| NbtTag::Compound(n.root_tag))
                 .context("failed post-ungzip parse")
         })
         .or_else(|_| {
-            valence_nbt::snbt::from_snbt_str(
-                std::str::from_utf8(&input)
-                    .context("failed utf8 check after non-stringified failures")?
-                    .trim_ascii_end(),
-            )
-            .context("failed snbt parse")
+            std::str::from_utf8(&input)
+                .context("failed utf8 check after non-stringified failures")?
+                .trim_ascii_end()
+                .parse()
+                .context("failed snbt parse")
         })
         .expect("input should be NBT or SNBT");
     let input = Val(input);

@@ -1,9 +1,8 @@
+use crab_nbt::{NbtCompound, NbtList, NbtTag};
 #[cfg(feature = "colours")]
 pub use owo_colors;
 #[cfg(feature = "colours")]
 use owo_colors::{OwoColorize, Style};
-
-use valence_nbt::{Compound, List, Value};
 
 type Result<T = (), E = std::fmt::Error> = std::result::Result<T, E>;
 
@@ -26,6 +25,7 @@ pub struct WriterOptions {
 type Style = ();
 
 #[cfg(not(feature = "colours"))]
+#[allow(unused)]
 trait Unstylish {
     fn style(&self, style: Style) -> &'static str {
         ""
@@ -91,7 +91,7 @@ impl WriterOptions {
 
 pub fn write_snbt_string<W: std::fmt::Write>(
     writer: &mut W,
-    value: &Value,
+    value: &NbtTag,
     options: WriterOptions,
 ) -> Result {
     let mut writer = SnbtWriter::new(writer, options);
@@ -99,7 +99,7 @@ pub fn write_snbt_string<W: std::fmt::Write>(
     Ok(())
 }
 
-pub fn to_snbt_string(value: &Value, options: WriterOptions) -> Result<String> {
+pub fn to_snbt_string(value: &NbtTag, options: WriterOptions) -> Result<String> {
     let mut s = String::new();
     let mut writer = SnbtWriter::new(&mut s, options);
     writer.write_element(value)?;
@@ -152,7 +152,7 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
     fn write_primitive_array<'b>(
         &mut self,
         prefix: &str,
-        iter: &'b [impl Into<Value> + 'b + Copy],
+        iter: &'b [impl Into<NbtTag> + 'b + Copy],
     ) -> Result {
         if iter.is_empty() {
             self.output.write_str("[]")?;
@@ -206,61 +206,35 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
         Ok(())
     }
 
-    fn write_list(&mut self, list: &List) -> Result {
-        macro_rules! variant_impl {
-            ($v:expr, $handle:expr) => {{
-                if $v.is_empty() {
-                    self.output.write_str("[]")?;
-                    return Ok(());
-                }
-
-                self.output.write_char('[')?;
-
-                self.options.depth += 1;
-                let mut first = true;
-                for v in $v.iter() {
-                    if !first {
-                        self.output.write_char(',')?;
-                    }
-
-                    self.new_line()?;
-                    first = false;
-                    $handle(v)?;
-                }
-
-                self.options.depth -= 1;
-                self.new_line()?;
-                self.output.write_char(']')?;
-
-                Ok(())
-            }};
+    fn write_list(&mut self, list: &NbtList) -> Result {
+        if list.is_empty() {
+            self.output.write_str("[]")?;
+            return Ok(());
         }
-        #[allow(clippy::redundant_closure_call)]
-        match list {
-            List::Byte(v) => variant_impl!(v, |v| self.write_primitive("b", v)),
-            List::Short(v) => variant_impl!(v, |v| self.write_primitive("s", v)),
-            List::Int(v) => variant_impl!(v, |v| self.write_primitive("", v)),
-            List::Long(v) => variant_impl!(v, |v| self.write_primitive("l", v)),
-            List::Float(v) => variant_impl!(v, |v| self.write_primitive("f", v)),
-            List::Double(v) => variant_impl!(v, |v| self.write_primitive("d", v)),
-            List::ByteArray(v) => {
-                variant_impl!(v, |v: &Vec<i8>| self.write_primitive_array("B", v))
+
+        self.output.write_char('[')?;
+
+        self.options.depth += 1;
+        let mut first = true;
+        for v in list {
+            if !first {
+                self.output.write_char(',')?;
             }
-            List::IntArray(v) => {
-                variant_impl!(v, |v: &Vec<i32>| self.write_primitive_array("", v))
-            }
-            List::LongArray(v) => {
-                variant_impl!(v, |v: &Vec<i64>| self.write_primitive_array("L", v))
-            }
-            List::String(v) => variant_impl!(v, |v| self.write_string(v)),
-            List::List(v) => variant_impl!(v, |v| self.write_list(v)),
-            List::Compound(v) => variant_impl!(v, |v| self.write_compound(v)),
-            List::End => self.output.write_str("[]"),
+
+            self.new_line()?;
+            first = false;
+            self.write_element(v)?;
         }
+
+        self.options.depth -= 1;
+        self.new_line()?;
+        self.output.write_char(']')?;
+
+        Ok(())
     }
 
-    fn write_compound(&mut self, compound: &Compound) -> Result {
-        if compound.is_empty() {
+    fn write_compound(&mut self, compound: &NbtCompound) -> Result {
+        if compound.child_tags.is_empty() {
             self.output.write_str("{}")?;
             return Ok(());
         }
@@ -270,7 +244,7 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
         self.options.depth += 1;
 
         let mut first = true;
-        for (k, v) in compound.iter() {
+        for (k, v) in compound.child_tags.iter() {
             if !first {
                 self.output.write_char(',')?;
             }
@@ -304,8 +278,8 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
     }
 
     /// Write a value to the output.
-    pub fn write_element(&mut self, value: &Value) -> Result {
-        use Value::*;
+    pub fn write_element(&mut self, value: &NbtTag) -> Result {
+        use NbtTag::*;
 
         match value {
             Byte(v) => self.write_primitive("b", v)?,
@@ -314,12 +288,19 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
             Long(v) => self.write_primitive("l", v)?,
             Float(v) => self.write_primitive("f", v)?,
             Double(v) => self.write_primitive("d", v)?,
-            ByteArray(v) => self.write_primitive_array("B;", v)?,
+            ByteArray(v) => self.write_primitive_array(
+                "B;",
+                &v.iter()
+                    .copied()
+                    .map(|v| i8::from_ne_bytes([v]))
+                    .collect::<Box<[_]>>(),
+            )?,
             IntArray(v) => self.write_primitive_array("I;", v)?,
             LongArray(v) => self.write_primitive_array("L;", v)?,
             String(v) => self.write_string(v)?,
             List(v) => self.write_list(v)?,
             Compound(v) => self.write_compound(v)?,
+            End => (),
         }
 
         Ok(())
