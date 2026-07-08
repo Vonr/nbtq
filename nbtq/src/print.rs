@@ -14,11 +14,19 @@ pub struct SnbtWriter<'writer, W> {
 pub struct WriterOptions {
     pub depth: u32,
     pub pretty: bool,
-    pub prefix_lists: bool,
-    pub postfix_primitives: bool,
+    pub prefix_arrays: bool,
+    pub suffix_numbers: bool,
     pub whitespace: String,
+    pub quote_mode: QuoteMode,
     #[cfg(feature = "colours")]
     pub styles: Option<WriterStyles>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum QuoteMode {
+    Always,
+    IfNeeded,
+    Never,
 }
 
 #[cfg(not(feature = "colours"))]
@@ -36,6 +44,7 @@ trait Unstylish {
 impl<T> Unstylish for T {}
 
 #[cfg_attr(not(feature = "colours"), derive(Default))]
+#[derive(Clone, Copy)]
 pub struct WriterStyles {
     pub strings: Style,
     pub keys: Style,
@@ -64,9 +73,10 @@ impl Default for WriterOptions {
         Self {
             depth: 0,
             pretty: false,
-            prefix_lists: true,
-            postfix_primitives: true,
+            prefix_arrays: true,
+            suffix_numbers: true,
             whitespace: "    ".to_string(),
+            quote_mode: QuoteMode::IfNeeded,
             #[cfg(feature = "colours")]
             styles: None,
         }
@@ -124,15 +134,13 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
     }
 
     fn write_string(&mut self, s: &str) -> Result {
-        let mut need_quote = false;
-        for c in s.chars() {
-            if !matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '-' | '+' | '.') {
-                need_quote = true;
-                break;
-            }
-        }
+        let should_quote = match self.options.quote_mode {
+            QuoteMode::Always => true,
+            QuoteMode::IfNeeded => !s.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
+            QuoteMode::Never => false,
+        };
 
-        if need_quote {
+        if should_quote {
             if let Some(styles) = self.options.styles() {
                 write!(self.output, "{:?}", s.style(styles.strings))?;
             } else {
@@ -160,7 +168,7 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
         }
 
         self.output.write_char('[')?;
-        if self.options.prefix_lists {
+        if self.options.prefix_arrays {
             if let Some(styles) = self.options.styles() {
                 self.output
                     .write_str(&prefix.style(styles.list_prefix).to_string())?;
@@ -193,13 +201,13 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
     fn write_primitive(&mut self, postfix: &str, value: impl std::fmt::Display) -> Result {
         if let Some(styles) = self.options.styles() {
             write!(self.output, "{}", value.style(styles.primitives))?;
-            if self.options.postfix_primitives {
+            if self.options.suffix_numbers {
                 self.output
                     .write_str(&postfix.style(styles.primitive_postfix).to_string())?;
             }
         } else {
             self.output.write_str(&value.to_string())?;
-            if self.options.postfix_primitives {
+            if self.options.suffix_numbers {
                 self.output.write_str(postfix)?;
             }
         }
