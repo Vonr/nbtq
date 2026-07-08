@@ -49,7 +49,7 @@ fn main() -> Result<()> {
                 .parse()
                 .context("failed snbt parse")
         })
-        .expect("input should be NBT or SNBT");
+        .context("input should be NBT or SNBT")?;
     let input = Val(input);
 
     let program = File {
@@ -63,12 +63,32 @@ fn main() -> Result<()> {
     let loader = Loader::new(defs);
     let arena = Arena::default();
 
-    let modules = loader.load(&arena, program).unwrap();
+    let modules = match loader.load(&arena, program) {
+        Ok(modules) => modules,
+        Err(errors) => {
+            eprintln!("Error loading program:");
+            for e in errors {
+                eprintln!("- {:?}", e.1);
+            }
 
-    let filter = jaq_core::Compiler::default()
+            std::process::exit(1);
+        }
+    };
+
+    let filter = match jaq_core::Compiler::default()
         .with_funs(funs)
         .compile(modules)
-        .expect("should compile");
+    {
+        Ok(filter) => filter,
+        Err(errors) => {
+            eprintln!("Error compiling filter:");
+            for e in errors {
+                eprintln!("- {:?}", e.1);
+            }
+
+            std::process::exit(1);
+        }
+    };
 
     let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
     let out = filter.id.run((ctx, input)).map(unwrap_valr);
