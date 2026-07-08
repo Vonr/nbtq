@@ -157,7 +157,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 [[package]]
 name = "crab_nbt"
 version = "0.2.11"
-source = "git+https://github.com/Vonr/CrabNBT.git?branch=nbtq#89605ecb3d853d6f7bfa67fad7f4c36df37ea20e"
+source = "git+https://github.com/Vonr/CrabNBT.git?branch=nbtq#db61c584a747115215c8282c71c018fdad4f47db"
 dependencies = [
  "bytes",
  "derive_more",
@@ -416,9 +416,9 @@ checksum = "670fdfda89751bc4a84ac13eaa63e205cf0fd22b4c9a5fbfa085b63c1f1d3a30"
 
 [[package]]
 name = "memchr"
-version = "2.8.2"
+version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
+checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "miniz_oxide"
