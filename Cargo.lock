@@ -157,7 +157,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 [[package]]
 name = "crab_nbt"
 version = "0.2.11"
-source = "git+https://github.com/Vonr/CrabNBT.git?branch=nbtq#c958399231b09f10bf879dc8d5d3f1df8806cc3a"
+source = "git+https://github.com/Vonr/CrabNBT.git?branch=nbtq#0795db72f68116623b2b1330e3e02e7218ca76a7"
 dependencies = [
  "bytes",
  "derive_more",
