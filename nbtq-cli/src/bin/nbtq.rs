@@ -13,15 +13,16 @@ use nbtq::print::WriterStyles;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    #[arg(default_value = ".")]
     code: String,
     path: Option<String>,
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let Args { code, path } = Args::parse();
 
     let mut input = Vec::new();
-    if let Some(path) = args.path
+    if let Some(path) = path
         && path != "-"
     {
         let mut file = std::fs::OpenOptions::new().read(true).open(path)?;
@@ -52,7 +53,7 @@ fn main() -> Result<()> {
     let input = Val(input);
 
     let program = File {
-        code: args.code.as_str(),
+        code: code.as_str(),
         path: (),
     };
 
