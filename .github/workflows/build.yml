@@ -83,16 +83,18 @@ jobs:
     - name: Build release binary (windows-latest)
       if: matrix.os == 'windows-latest'
       shell: bash
-      run: cargo build --verbose --release --target ${{ matrix.target }}
+      run: cargo build --release --target ${{ matrix.target }}
 
     - name: Build release binary (ubuntu-latest)
       if: matrix.os == 'ubuntu-latest'
       uses: tj-actions/docker-run@v2
       with:
-        image: rust-cross/cargo-zigbuild
+        image: ghcr.io/rust-cross/cargo-zigbuild
         name: zigbuild
         options: --rm -v $(pwd):/io -w /io
-        args: cargo zigbuild --release --target ${{ matrix.target }}
+        args: |
+          rustup update stable
+          cargo zigbuild --release --target ${{ matrix.target }}
 
     - name: Select release path
       shell: bash
