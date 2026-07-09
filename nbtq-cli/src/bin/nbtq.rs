@@ -3,7 +3,7 @@ use std::io::{IsTerminal, Read, Write};
 use anyhow::{Context, bail};
 pub use anyhow::{Error, Result};
 use clap::builder::PossibleValue;
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, CommandFactory, Parser};
 use flate2::Compression;
 use flate2::write::{GzDecoder, GzEncoder};
 use jaq_core::load::{Arena, Loader};
@@ -13,10 +13,12 @@ use nbtq_core::nbt::{Nbt, NbtTag};
 use nbtq_core::print::{QuoteMode, WriterStyles};
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(name = "nbtq", version, about, long_about = None)]
 struct Args {
-    #[arg(default_value = ".")]
-    code: String,
+    /// [default: .]
+    filter: Option<String>,
+
+    /// path to the input or - for stdin
     path: Option<String>,
 
     // Whether to color the output, overrides $NO_COLOR and $FORCE_COLOR
@@ -43,13 +45,17 @@ struct Args {
     #[arg(long = "no-prefix", action = ArgAction::SetFalse, default_value_t = true)]
     prefix_arrays: bool,
 
-    /// Output file
+    /// Output file path
     #[arg(long = "output", short = 'o')]
     output: Option<String>,
 
     /// Output file format
     #[arg(long = "format", short = 'f', value_enum)]
     output_format: Option<OutputFormat>,
+
+    /// Treat [PATH] as SNBT input
+    #[arg(long = "args")]
+    input_from_args: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,6 +84,7 @@ enum OutputFormat {
     Input,
     Snbt,
     Nbt,
+    Gzip,
     Gzip1,
     Gzip2,
     Gzip3,
@@ -94,12 +101,12 @@ impl OutputFormat {
         match self {
             OutputFormat::Nbt => Self::write_nbt(writer, value),
             OutputFormat::Snbt => Self::write_snbt(writer, value),
+            OutputFormat::Gzip | OutputFormat::Gzip6 => Self::write_gzip(6, writer, value),
             OutputFormat::Gzip1 => Self::write_gzip(1, writer, value),
             OutputFormat::Gzip2 => Self::write_gzip(2, writer, value),
             OutputFormat::Gzip3 => Self::write_gzip(3, writer, value),
             OutputFormat::Gzip4 => Self::write_gzip(4, writer, value),
             OutputFormat::Gzip5 => Self::write_gzip(5, writer, value),
-            OutputFormat::Gzip6 => Self::write_gzip(6, writer, value),
             OutputFormat::Gzip7 => Self::write_gzip(7, writer, value),
             OutputFormat::Gzip8 => Self::write_gzip(8, writer, value),
             OutputFormat::Gzip9 => Self::write_gzip(9, writer, value),
@@ -129,6 +136,7 @@ impl clap::ValueEnum for OutputFormat {
             Self::Input,
             Self::Nbt,
             Self::Snbt,
+            Self::Gzip,
             Self::Gzip1,
             Self::Gzip2,
             Self::Gzip3,
@@ -144,12 +152,13 @@ impl clap::ValueEnum for OutputFormat {
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         match self {
             Self::Input => Some(PossibleValue::new("input").alias("in")),
+            Self::Gzip => Some(PossibleValue::new("gz").alias("gzip")),
             Self::Gzip1 => Some(PossibleValue::new("gz1").alias("gzip1")),
             Self::Gzip2 => Some(PossibleValue::new("gz2").alias("gzip2")),
             Self::Gzip3 => Some(PossibleValue::new("gz3").alias("gzip3")),
             Self::Gzip4 => Some(PossibleValue::new("gz4").alias("gzip4")),
             Self::Gzip5 => Some(PossibleValue::new("gz5").alias("gzip5")),
-            Self::Gzip6 => Some(PossibleValue::new("gz").aliases(["gz6", "gzip6"])),
+            Self::Gzip6 => Some(PossibleValue::new("gz6").alias("gzip6")),
             Self::Gzip7 => Some(PossibleValue::new("gz7").alias("gzip7")),
             Self::Gzip8 => Some(PossibleValue::new("gz8").alias("gzip8")),
             Self::Gzip9 => Some(PossibleValue::new("gz9").alias("gzip9")),
@@ -161,7 +170,7 @@ impl clap::ValueEnum for OutputFormat {
 
 fn main() -> Result<()> {
     let Args {
-        code,
+        filter,
         path,
         color,
         pretty,
@@ -171,7 +180,16 @@ fn main() -> Result<()> {
         prefix_arrays,
         output,
         mut output_format,
+        input_from_args,
     } = Args::parse();
+
+    let mut stdin = std::io::stdin().lock();
+    if stdin.is_terminal() && filter.is_none() {
+        Args::command().print_help()?;
+        return Ok(());
+    }
+
+    let filter = filter.unwrap_or_else(|| String::from("."));
 
     if output.is_none() {
         if output_format.is_some() {
@@ -182,7 +200,7 @@ fn main() -> Result<()> {
     }
 
     let program = jaq_core::load::File {
-        code: code.as_str(),
+        code: filter.as_str(),
         path: (),
     };
 
@@ -225,39 +243,47 @@ fn main() -> Result<()> {
 
     let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
 
-    let mut input = Vec::new();
-    if let Some(path) = path
-        && path != "-"
-    {
-        let mut file = std::fs::OpenOptions::new().read(true).open(path)?;
-        file.read_to_end(&mut input)?;
-    } else {
-        std::io::stdin().lock().read_to_end(&mut input)?;
-    }
-
     let mut input_format = OutputFormat::Nbt;
+    let input = if input_from_args {
+        let Some(input) = path else {
+            bail!("No input given in args.\nUsage: nbtq --args <filter> <input>");
+        };
 
-    let input = Nbt::read(&mut input.as_slice())
-        .map(|n| NbtTag::Compound(n.root_tag))
-        .or_else(|_| {
-            let decoded = Vec::new();
-            let mut decoder = GzDecoder::new(decoded);
-            decoder.write_all(&input)?;
-            input = decoder.finish().context("gzip decode failure")?;
-            input_format = OutputFormat::Gzip6;
-            Nbt::read(&mut input.as_slice())
-                .map(|n| NbtTag::Compound(n.root_tag))
-                .context("failed post-ungzip parse")
-        })
-        .or_else(|_| {
-            input_format = OutputFormat::Snbt;
-            std::str::from_utf8(&input)
-                .context("failed utf8 check after non-stringified failures")?
-                .trim_ascii_end()
-                .parse()
-                .context("failed snbt parse")
-        })
-        .context("input should be NBT or SNBT")?;
+        input_format = OutputFormat::Snbt;
+        input.parse().context("input should be SNBT")?
+    } else {
+        let mut input = Vec::new();
+        if let Some(path) = path
+            && path != "-"
+        {
+            let mut file = std::fs::OpenOptions::new().read(true).open(path)?;
+            file.read_to_end(&mut input)?;
+        } else {
+            stdin.read_to_end(&mut input)?;
+        }
+
+        Nbt::read(&mut input.as_slice())
+            .map(|n| NbtTag::Compound(n.root_tag))
+            .or_else(|_| {
+                let decoded = Vec::new();
+                let mut decoder = GzDecoder::new(decoded);
+                decoder.write_all(&input)?;
+                input = decoder.finish().context("gzip decode failure")?;
+                input_format = OutputFormat::Gzip6;
+                Nbt::read(&mut input.as_slice())
+                    .map(|n| NbtTag::Compound(n.root_tag))
+                    .context("failed post-ungzip parse")
+            })
+            .or_else(|_| {
+                input_format = OutputFormat::Snbt;
+                std::str::from_utf8(&input)
+                    .context("failed utf8 check after non-stringified failures")?
+                    .trim_ascii_end()
+                    .parse()
+                    .context("failed snbt parse")
+            })
+            .context("input should be NBT or SNBT")?
+    };
 
     if output_format == Some(OutputFormat::Input) {
         output_format = Some(input_format);
