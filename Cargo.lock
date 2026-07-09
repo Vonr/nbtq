@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "nbtq-cli"
-version = "0.0.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "nbtq-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
