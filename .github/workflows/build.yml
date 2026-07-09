@@ -73,16 +73,27 @@ jobs:
       run: |
         ci/ubuntu-install-packages
 
-    - name: Install Rust
+    - name: Install Rust (windows-latest)
+      if: matrix.os == 'windows-latest'
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
 
-    - name: Build release binary
+    - name: Build release binary (windows-latest)
+      if: matrix.os == 'windows-latest'
       shell: bash
       run: cargo build --verbose --release --target ${{ matrix.target }}
-     
+
+    - name: Build release binary (ubuntu-latest)
+      if: matrix.os == 'ubuntu-latest'
+      uses: tj-actions/docker-run@v2
+      with:
+        image: rust-cross/cargo-zigbuild
+        name: zigbuild
+        options: --rm -v $(pwd):/io -w /io
+        args: cargo zigbuild --release --target ${{ matrix.target }}
+
     - name: Select release path
       shell: bash
       run: |
