@@ -4,3 +4,10 @@ members = [
     "nbtq-cli",
     "nbtq-core",
 ]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = 0
+strip = "symbols"
