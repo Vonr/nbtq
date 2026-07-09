@@ -73,8 +73,7 @@ jobs:
       run: |
         ci/ubuntu-install-packages
 
-    - name: Install Rust (windows-latest)
-      if: matrix.os == 'windows-latest'
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
@@ -87,14 +86,11 @@ jobs:
 
     - name: Build release binary (ubuntu-latest)
       if: matrix.os == 'ubuntu-latest'
-      uses: tj-actions/docker-run@v2
-      with:
-        image: ghcr.io/rust-cross/cargo-zigbuild
-        name: zigbuild
-        options: --rm -v $(pwd):/io -w /io
-        args: |
-          rustup update stable
-          cargo zigbuild --release --target ${{ matrix.target }}
+      shell: bash
+      run: |
+        . "$HOME/.cargo/env"
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.0/cargo-zigbuild-installer.sh | sh
+        cargo zigbuild --release --target ${{ matrix.target }}
 
     - name: Select release path
       shell: bash
