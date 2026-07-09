@@ -157,7 +157,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 [[package]]
 name = "crab_nbt"
 version = "0.2.11"
-source = "git+https://github.com/Vonr/CrabNBT.git?branch=nbtq#e1521f7bcaa98b3738a4df71bed1838a2c18bc1c"
+source = "git+https://github.com/Vonr/CrabNBT.git?branch=nbtq#4ce91e7fa13d9cc34a53f8a22a8b3de11931cf34"
 dependencies = [
  "bytes",
  "derive_more",
@@ -611,9 +611,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.14"
+version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
+checksum = "1f388202e4b80542a0921078cc23b6333bcf1409c1e3f86404cae4766a6131db"
 
 [[package]]
 name = "regex-bites"

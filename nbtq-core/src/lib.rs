@@ -1,6 +1,6 @@
 pub mod print;
 
-use std::{cmp::Ordering, fmt::Debug};
+use std::fmt::Debug;
 
 pub use anyhow::Error;
 use anyhow::anyhow;
@@ -17,7 +17,7 @@ use jaq_core::{
 
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Val(pub NbtTag);
 
 impl Val {
@@ -137,41 +137,6 @@ impl NbtExtension for Val {
 
 pub type ValR = jaq_core::ValR<Val>;
 pub type ValX<'a> = jaq_core::ValX<'a, Val>;
-
-// this is incorrect, but necessary for implementing jaq_std::ValT
-impl Eq for Val {}
-
-// this is incorrect, but necessary for implementing jaq_core::ValT
-impl Ord for Val {
-    fn cmp(&self, other: &Self) -> Ordering {
-        use NbtTag::*;
-
-        let tag = self.0.get_type_id().cmp(&other.0.get_type_id());
-        if tag != Ordering::Equal {
-            return tag;
-        }
-
-        match (&self.0, &other.0) {
-            (Byte(a), Byte(b)) => a.cmp(b),
-            (Short(a), Short(b)) => a.cmp(b),
-            (Int(a), Int(b)) => a.cmp(b),
-            (Long(a), Long(b)) => a.cmp(b),
-            (Float(a), Float(b)) => a.total_cmp(b),
-            (Double(a), Double(b)) => a.total_cmp(b),
-            (String(a), String(b)) => a.cmp(b),
-            (ByteArray(a), ByteArray(b)) => a.cmp(b),
-            (IntArray(a), IntArray(b)) => a.cmp(b),
-            (LongArray(a), LongArray(b)) => a.cmp(b),
-            _ => Ordering::Equal,
-        }
-    }
-}
-
-impl PartialOrd for Val {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
