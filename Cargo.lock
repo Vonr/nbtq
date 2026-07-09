@@ -431,7 +431,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "nbtq"
+name = "nbtq-cli"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "flate2",
+ "jaq-core",
+ "jaq-std",
+ "nbtq-core",
+]
+
+[[package]]
+name = "nbtq-core"
 version = "0.0.0"
 dependencies = [
  "anyhow",
@@ -441,18 +453,6 @@ dependencies = [
  "jaq-core",
  "jaq-std",
  "owo-colors",
-]
-
-[[package]]
-name = "nbtq-cli"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "flate2",
- "jaq-core",
- "jaq-std",
- "nbtq",
 ]
 
 [[package]]

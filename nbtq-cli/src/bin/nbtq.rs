@@ -8,9 +8,9 @@ use flate2::Compression;
 use flate2::write::{GzDecoder, GzEncoder};
 use jaq_core::load::{Arena, Loader};
 use jaq_core::{Ctx, Vars, data, unwrap_valr};
-use nbtq::Val;
-use nbtq::nbt::{Nbt, NbtTag};
-use nbtq::print::{QuoteMode, WriterStyles};
+use nbtq_core::Val;
+use nbtq_core::nbt::{Nbt, NbtTag};
+use nbtq_core::print::{QuoteMode, WriterStyles};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -186,8 +186,12 @@ fn main() -> Result<()> {
         path: (),
     };
 
-    let defs = jaq_core::defs().chain(jaq_std::defs()).chain(nbtq::defs());
-    let funs = jaq_core::funs().chain(jaq_std::funs()).chain(nbtq::funs());
+    let defs = jaq_core::defs()
+        .chain(jaq_std::defs())
+        .chain(nbtq_core::defs());
+    let funs = jaq_core::funs()
+        .chain(jaq_std::funs())
+        .chain(nbtq_core::funs());
 
     let loader = Loader::new(defs);
     let arena = Arena::default();
@@ -328,9 +332,9 @@ fn main() -> Result<()> {
 
         println!(
             "{}",
-            nbtq::print::to_snbt_string(
+            nbtq_core::print::to_snbt_string(
                 &v,
-                nbtq::print::WriterOptions {
+                nbtq_core::print::WriterOptions {
                     pretty,
                     quote_mode,
                     styles,
