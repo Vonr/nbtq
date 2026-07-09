@@ -1,4 +1,4 @@
-use crab_nbt::{NbtCompound, NbtList, NbtTag};
+use crab_nbt::{NbtCompound, NbtTag};
 #[cfg(feature = "colours")]
 pub use owo_colors;
 #[cfg(feature = "colours")]
@@ -214,7 +214,7 @@ impl<'writer, W: std::fmt::Write> SnbtWriter<'writer, W> {
         Ok(())
     }
 
-    fn write_list(&mut self, list: &NbtList) -> Result {
+    fn write_list(&mut self, list: &[NbtTag]) -> Result {
         if list.is_empty() {
             self.output.write_str("[]")?;
             return Ok(());

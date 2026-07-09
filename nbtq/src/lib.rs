@@ -6,7 +6,7 @@ pub use anyhow::Error;
 use anyhow::anyhow;
 use bytes::{BufMut, Bytes, BytesMut};
 pub use crab_nbt as nbt;
-use crab_nbt::{NbtCompound, NbtList, NbtTag};
+use crab_nbt::{NbtCompound, NbtTag};
 use jaq_core::{
     DataT, Exn, RunPtr,
     box_iter::box_once,
@@ -229,12 +229,7 @@ impl From<String> for Val {
 
 impl FromIterator<Self> for Val {
     fn from_iter<T: IntoIterator<Item = Self>>(iter: T) -> Self {
-        let iter = iter.into_iter();
-        let mut list = NbtList::with_capacity(iter.size_hint().0);
-        for value in iter {
-            list.push(value.0);
-        }
-        Val(NbtTag::List(list))
+        Val(NbtTag::List(iter.into_iter().map(|v| v.0).collect()))
     }
 }
 
@@ -248,14 +243,14 @@ impl core::ops::Add for Val {
         };
         use jaq_core::Error;
 
-        fn concatl<T: Into<NbtTag>>(mut a: NbtList, b: impl IntoIterator<Item = T>) -> NbtTag {
+        fn concatl<T: Into<NbtTag>>(mut a: Vec<NbtTag>, b: impl IntoIterator<Item = T>) -> NbtTag {
             a.extend(b.into_iter().map(Into::into));
             List(a)
         }
 
-        fn concatr<T: Into<NbtTag>>(a: impl IntoIterator<Item = T>, b: NbtList) -> NbtTag {
+        fn concatr<T: Into<NbtTag>>(a: impl IntoIterator<Item = T>, b: Vec<NbtTag>) -> NbtTag {
             let iter = a.into_iter();
-            let mut list = NbtList::with_capacity(iter.size_hint().0 + b.len());
+            let mut list = Vec::with_capacity(iter.size_hint().0 + b.len());
             list.extend(iter.map(Into::into));
             list.extend(b);
             List(list)
@@ -902,7 +897,7 @@ impl jaq_core::ValT for Val {
             IntArray(v) => IntArray(v.iter().take(end).skip(start).copied().collect::<Vec<_>>()),
             LongArray(v) => LongArray(v.iter().take(end).skip(start).copied().collect::<Vec<_>>()),
             List(v) => {
-                let list = NbtList::from_iter(v.into_iter().take(end).skip(start));
+                let list = v.into_iter().take(end).skip(start).collect();
                 List(list)
             }
             _ => return Err(Error::typ(self, "List")),
@@ -919,7 +914,7 @@ impl jaq_core::ValT for Val {
 
         Ok(Val(match self.0 {
             ByteArray(v) => {
-                let mut list = NbtList::new();
+                let mut list = Vec::new();
                 for value in v
                     .iter()
                     .copied()
@@ -940,7 +935,7 @@ impl jaq_core::ValT for Val {
                 NbtTag::List(list)
             }
             IntArray(v) => {
-                let mut list = NbtList::new();
+                let mut list = Vec::new();
                 for value in v.iter().copied().map(Int).map(Val).flat_map(f) {
                     match value {
                         Ok(value) => {
@@ -954,7 +949,7 @@ impl jaq_core::ValT for Val {
                 NbtTag::List(list)
             }
             LongArray(v) => {
-                let mut list = NbtList::new();
+                let mut list = Vec::new();
                 for value in v.iter().copied().map(Long).map(Val).flat_map(f) {
                     match value {
                         Ok(value) => {
@@ -968,7 +963,7 @@ impl jaq_core::ValT for Val {
                 NbtTag::List(list)
             }
             List(v) => {
-                let mut list = NbtList::new();
+                let mut list = Vec::new();
                 for value in v.iter().cloned().map(Val).flat_map(f) {
                     match value {
                         Ok(value) => {
@@ -1069,14 +1064,14 @@ impl jaq_core::ValT for Val {
                 }
             }
             (List(mut v), idx) if let Ok(idx) = idx.maybe_usize() => {
-                let Some(e) = v.replace(idx, NbtTag::End) else {
+                let Some(e) = v.get_mut(idx).map(|mr| std::mem::replace(mr, NbtTag::End)) else {
                     return opt.fail(self, |_| {
                         Exn::from(Error::index(Val(List(v)), Val(Int(idx as i32))))
                     });
                 };
                 match f(Val(e)).next().transpose() {
                     Ok(Some(e)) => {
-                        v.replace(idx, e.0).unwrap();
+                        v.get_mut(idx).map(|mr| std::mem::replace(mr, e.0)).unwrap();
                         Ok(Val(List(v)))
                     }
                     Ok(None) => {
@@ -1175,23 +1170,23 @@ impl jaq_core::ValT for Val {
                 let v = match (start, end) {
                     (None, None) => v,
                     (None, Some(end)) => {
-                        let mut vec = NbtList::new();
+                        let mut vec = Vec::new();
                         vec.extend(v.into_iter().take(end));
                         vec
                     }
                     (Some(start), None) => {
-                        let mut vec = NbtList::new();
+                        let mut vec = Vec::new();
                         vec.extend(v.into_iter().skip(start));
                         vec
                     }
                     (Some(start), Some(end)) => {
-                        let mut vec = NbtList::new();
+                        let mut vec = Vec::new();
                         vec.extend(v.into_iter().take(end).skip(start));
                         vec
                     }
                 };
                 let y = f(Val(NbtTag::List(v))).next();
-                Ok(y.transpose()?.unwrap_or(Val(NbtTag::List(NbtList::new()))))
+                Ok(y.transpose()?.unwrap_or(Val(NbtTag::List(Vec::new()))))
             }
             _ => opt.fail(self, |v| Exn::from(jaq_core::Error::typ(v, "List"))),
         }

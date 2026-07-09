@@ -176,9 +176,9 @@ fn main() -> Result<()> {
     if output.is_none() {
         if output_format.is_some() {
             bail!("`--format`/`-f` can only be used with `--output`/`-o`");
-        } else {
-            bail!("`--format`/`-f` must be specified for `--output`/`-o`");
         }
+    } else if output_format.is_none() {
+        bail!("`--format`/`-f` must be specified for `--output`/`-o`");
     }
 
     let program = jaq_core::load::File {
@@ -306,7 +306,7 @@ fn main() -> Result<()> {
         let tag = match out.len() {
             0 => bail!("No values to write"),
             1 => out.remove(0),
-            _ => NbtTag::List(out.into()),
+            _ => NbtTag::List(out),
         };
 
         let mut file = std::fs::OpenOptions::new()
