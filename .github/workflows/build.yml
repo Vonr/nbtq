@@ -89,7 +89,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       uses: tj-actions/docker-run@v2
       with:
-        image: messense/cargo-zigbuild
+        image: rust-cross/cargo-zigbuild
         name: zigbuild
         options: --rm -v $(pwd):/io -w /io
         args: cargo zigbuild --release --target ${{ matrix.target }}
