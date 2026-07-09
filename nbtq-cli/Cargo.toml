@@ -17,8 +17,8 @@ anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
-bin-dir = "{ name }-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-url = "{ repo }/releases/download/{ version }/nbtq-{ version }-{ target }{ archive-suffix }"
+bin-dir = "nbtq-{ version }-{ target }/{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
 disabled-strategies = ["quick-install", "compile"]
 
