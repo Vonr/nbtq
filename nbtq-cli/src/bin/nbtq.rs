@@ -97,7 +97,7 @@ enum OutputFormat {
 }
 
 impl OutputFormat {
-    fn write(self, writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
+    fn write(self, writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
         match self {
             OutputFormat::Nbt => Self::write_nbt(writer, value),
             OutputFormat::Snbt => Self::write_snbt(writer, value),
@@ -114,17 +114,17 @@ impl OutputFormat {
         }
     }
 
-    fn write_nbt(writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
-        writer.write_all(&value.serialize())?;
+    fn write_nbt(writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
+        value.write_to_writer(writer)?;
         Ok(())
     }
 
-    fn write_gzip(level: u8, writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
+    fn write_gzip(level: u8, writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
         let mut encoder = GzEncoder::new(writer, Compression::new(level as u32));
         Self::write_nbt(&mut encoder, value)
     }
 
-    fn write_snbt(writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
+    fn write_snbt(writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
         writer.write_all(value.to_string().as_bytes())?;
         Ok(())
     }
@@ -244,13 +244,16 @@ fn main() -> Result<()> {
     let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
 
     let mut input_format = OutputFormat::Nbt;
-    let input = if input_from_args {
+    let (name, input) = if input_from_args {
         let Some(input) = path else {
             bail!("No input given in args.\nUsage: nbtq --args <filter> <input>");
         };
 
         input_format = OutputFormat::Snbt;
-        input.parse().context("input should be SNBT")?
+        (
+            String::new(),
+            input.parse().context("input should be SNBT")?,
+        )
     } else {
         let mut input = Vec::new();
         if let Some(path) = path
@@ -262,17 +265,14 @@ fn main() -> Result<()> {
             stdin.read_to_end(&mut input)?;
         }
 
-        Nbt::read(&mut input.as_slice())
-            .map(|n| NbtTag::Compound(n.root_tag))
+        let nbt = Nbt::read(&mut input.as_slice())
             .or_else(|_| {
                 let decoded = Vec::new();
                 let mut decoder = GzDecoder::new(decoded);
                 decoder.write_all(&input)?;
                 input = decoder.finish().context("gzip decode failure")?;
                 input_format = OutputFormat::Gzip6;
-                Nbt::read(&mut input.as_slice())
-                    .map(|n| NbtTag::Compound(n.root_tag))
-                    .context("failed post-ungzip parse")
+                Nbt::read(&mut input.as_slice()).context("failed post-ungzip parse")
             })
             .or_else(|_| {
                 input_format = OutputFormat::Snbt;
@@ -282,14 +282,16 @@ fn main() -> Result<()> {
                     .parse()
                     .context("failed snbt parse")
             })
-            .context("input should be NBT or SNBT")?
+            .context("input should be NBT or SNBT")?;
+
+        (nbt.name, nbt.root_tag)
     };
 
     if output_format == Some(OutputFormat::Input) {
         output_format = Some(input_format);
     }
 
-    let input = Val(input);
+    let input = Val(input.into());
     let mut out = match filter
         .id
         .run((ctx, input))
@@ -333,10 +335,12 @@ fn main() -> Result<()> {
     };
 
     if let Some(path) = output {
-        let tag = match out.len() {
+        let NbtTag::Compound(tag) = (match out.len() {
             0 => bail!("No values to write"),
             1 => out.remove(0),
-            _ => NbtTag::List(out),
+            _ => bail!("Too many values to write"),
+        }) else {
+            bail!("Cannot write a non-Compound value");
         };
 
         let mut file = std::fs::OpenOptions::new()
@@ -345,7 +349,9 @@ fn main() -> Result<()> {
             .truncate(true)
             .open(path)?;
 
-        output_format.unwrap().write(&mut file, tag)?;
+        output_format
+            .unwrap()
+            .write(&mut file, Nbt::new(name, tag))?;
 
         return Ok(());
     }
