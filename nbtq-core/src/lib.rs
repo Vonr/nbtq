@@ -1,9 +1,9 @@
 pub mod print;
 
-use std::fmt::Debug;
+use std::{fmt::Debug, str::FromStr};
 
 pub use anyhow::Error;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use bytes::{BufMut, Bytes, BytesMut};
 pub use crab_nbt as nbt;
 use crab_nbt::{NbtCompound, NbtTag};
@@ -639,13 +639,162 @@ pub fn funs<D: for<'a> DataT<V<'a> = Val>>() -> impl Iterator<Item = Fun<D>> {
 fn base<D: for<'a> DataT<V<'a> = Val>>() -> Box<[Filter<RunPtr<D>>]> {
     use NbtTag::*;
     use jaq_core::Error;
-    Box::new([("length", v(0), |cv| {
-        bome(
-            cv.1.len()
-                .map(|n| Val(Int(n as i32)))
-                .ok_or_else(|| Error::str("no length")),
-        )
-    })])
+    Box::new([
+        ("length", v(0), |cv| {
+            bome(
+                cv.1.len()
+                    .map(|n| Val(Int(n as i32)))
+                    .ok_or_else(|| Error::str(format!("@length called on {:?}", cv.1.0))),
+            )
+        }),
+        ("@byte", v(0), |cv| {
+            bome(match cv.1.0 {
+                Byte(v) => Ok(Val(v.into())),
+                Short(v) => i8::try_from(v)
+                    .map_err(|_| Error::str("does not fit in byte"))
+                    .map(|v| Val(v.into())),
+                Int(v) => i8::try_from(v)
+                    .map_err(|_| Error::str("does not fit in byte"))
+                    .map(|v| Val(v.into())),
+                Long(v) => i8::try_from(v)
+                    .map_err(|_| Error::str("does not fit in byte"))
+                    .map(|v| Val(v.into())),
+                Float(v) if v == v as i8 as f32 => Ok(Val((v as i8).into())),
+                Double(v) if v == v as i8 as f64 => Ok(Val((v as i8).into())),
+                v => Err(Error::str(format!(
+                    "@byte expected an integer but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@short", v(0), |cv| {
+            bome(match cv.1.0 {
+                Byte(v) => Ok(Val((v as i16).into())),
+                Short(v) => Ok(Val(v.into())),
+                Int(v) => i16::try_from(v)
+                    .map_err(|_| Error::str("does not fit in short"))
+                    .map(|v| Val(v.into())),
+                Long(v) => i16::try_from(v)
+                    .map_err(|_| Error::str("does not fit in short"))
+                    .map(|v| Val(v.into())),
+                Float(v) if v == v as i16 as f32 => Ok(Val((v as i16).into())),
+                Double(v) if v == v as i16 as f64 => Ok(Val((v as i16).into())),
+                v => Err(Error::str(format!(
+                    "@short expected an integer but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@int", v(0), |cv| {
+            bome(match cv.1.0 {
+                Byte(v) => Ok(Val((v as i32).into())),
+                Short(v) => Ok(Val((v as i32).into())),
+                Int(v) => Ok(Val(v.into())),
+                Long(v) => i32::try_from(v)
+                    .map_err(|_| Error::str("does not fit in int"))
+                    .map(|v| Val(v.into())),
+                Float(v) if v == v as i32 as f32 => Ok(Val((v as i32).into())),
+                Double(v) if v == v as i32 as f64 => Ok(Val((v as i32).into())),
+                v => Err(Error::str(format!(
+                    "@int expected an integer but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@long", v(0), |cv| {
+            bome(match cv.1.0 {
+                Byte(v) => Ok(Val((v as i64).into())),
+                Short(v) => Ok(Val((v as i64).into())),
+                Int(v) => Ok(Val((v as i64).into())),
+                Long(v) => Ok(Val(v.into())),
+                Float(v) if v == v as i64 as f32 => Ok(Val((v as i64).into())),
+                Double(v) if v == v as i64 as f64 => Ok(Val((v as i64).into())),
+                v => Err(Error::str(format!(
+                    "@long expected an integer but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@float", v(0), |cv| {
+            bome(match cv.1.0 {
+                Byte(v) => Ok(Val((v as f32).into())),
+                Short(v) => Ok(Val((v as f32).into())),
+                Int(v) => Ok(Val((v as f32).into())),
+                Long(v) => Ok(Val((v as f32).into())),
+                Float(v) => Ok(Val(v.into())),
+                Double(v) => Ok(Val((v as f32).into())),
+                v => Err(Error::str(format!(
+                    "@float expected a number but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@double", v(0), |cv| {
+            bome(match cv.1.0 {
+                Byte(v) => Ok(Val((v as f64).into())),
+                Short(v) => Ok(Val((v as f64).into())),
+                Int(v) => Ok(Val((v as f64).into())),
+                Long(v) => Ok(Val((v as f64).into())),
+                Float(v) => Ok(Val((v as f64).into())),
+                Double(v) => Ok(Val(v.into())),
+                v => Err(Error::str(format!(
+                    "@double expected a number but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@uuid", v(0), |cv| {
+            bome(match cv.1.0 {
+                String(v) => uuid_from_str(&v)
+                    .map_err(|e| Error::str(e.to_string()))
+                    .map(|v| Val(IntArray(v.to_vec()))),
+                v => Err(Error::str(format!(
+                    "@uuid expected a String but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("@uuid_string", v(0), |cv| {
+            bome(match cv.1.0 {
+                IntArray(a) if a.len() == 4 => {
+                    let first = a[0];
+                    let Ok(second_third) =
+                        <[[u8; 2]; 2]>::try_from(a[1].to_be_bytes().as_chunks::<2>().0)
+                    else {
+                        unreachable!();
+                    };
+                    let [second, third] = second_third.map(i16::from_be_bytes);
+
+                    let Ok(fourth_fifth) =
+                        <[[u8; 2]; 2]>::try_from(a[2].to_be_bytes().as_chunks::<2>().0)
+                    else {
+                        unreachable!();
+                    };
+                    let [fourth, fifth_first_third] = fourth_fifth.map(i16::from_be_bytes);
+                    let fifth_last_two_thirds = a[3];
+
+                    Ok(Val(format!(
+                        "{first:08x}-{second:04x}-{third:04x}-{fourth:04x}-{fifth_first_third:04x}{fifth_last_two_thirds:08x}",
+                    )
+                    .into()))
+                }
+                v => Err(Error::str(format!(
+                    "@uuid_string expected an IntArray with 4 elements but got {v:?} instead"
+                ))),
+            })
+        }),
+        ("parse", v(0), |cv| {
+            bome(match cv.1.0 {
+                String(s) => {
+                    if s.is_empty() {
+                        Err(Error::str(
+                            "@parse expected a non-empty String but got an empty string",
+                        ))
+                    } else {
+                        crab_nbt::NbtTag::from_str(&s)
+                            .map(Val)
+                            .map_err(|e| Error::str(format!("Error parsing String {s:?}: {e}")))
+                    }
+                }
+                v => Err(Error::str(format!(
+                    "@parse expected a non-empty String but got {v:?} instead"
+                ))),
+            })
+        }),
+    ])
 }
 
 impl jaq_core::ValT for Val {
@@ -1247,4 +1396,54 @@ impl jaq_std::ValT for Val {
             std::str::from_utf8(b.as_ref()).unwrap().to_string(),
         ))
     }
+}
+
+pub fn uuid_from_str(name: &str) -> Result<[i32; 4]> {
+    // 32 hex digits + 4 dashes
+    let len = name.len();
+    if len > 36 {
+        bail!("UUID should contain at most 32 hexadecimal digits and 4 dashes");
+    }
+
+    let mut dashes = name
+        .chars()
+        .enumerate()
+        .filter(|(_, c)| *c == '-')
+        .map(|(i, _)| i);
+
+    let Some(dash_1) = dashes.next() else {
+        bail!("UUID contains none of 4 expected dashes");
+    };
+    let Some(dash_2) = dashes.next() else {
+        bail!("UUID only contains 1 of 4 expected dashes");
+    };
+    let Some(dash_3) = dashes.next() else {
+        bail!("UUID only contains 2 of 4 expected dashes");
+    };
+    let Some(dash_4) = dashes.next() else {
+        bail!("UUID only contains 3 of 4 expected dashes");
+    };
+
+    if dashes.next().is_some() {
+        bail!("UUID contains more than 4 expected dashes");
+    }
+
+    let mut msb = u64::from_str_radix(&name[..dash_1], 16)? & 0xFFFF_FFFF;
+    msb <<= 16;
+    msb |= u64::from_str_radix(&name[dash_1 + 1..dash_2], 16)? & 0xFFFF;
+    msb <<= 16;
+    msb |= u64::from_str_radix(&name[dash_2 + 1..dash_3], 16)? & 0xFFFF;
+
+    let mut lsb = u64::from_str_radix(&name[dash_3 + 1..dash_4], 16)? & 0xFFFF;
+    lsb <<= 48;
+    lsb |= u64::from_str_radix(&name[dash_4 + 1..], 16)? & 0xFFFF_FFFF_FFFF;
+
+    let &[a, b] = msb.to_be_bytes().as_chunks::<4>().0 else {
+        unreachable!()
+    };
+    let &[c, d] = lsb.to_be_bytes().as_chunks::<4>().0 else {
+        unreachable!()
+    };
+
+    Ok([a, b, c, d].map(i32::from_be_bytes))
 }
