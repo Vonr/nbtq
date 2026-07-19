@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "nbtq-cli"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -448,7 +448,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
- "cfg-if",
  "crab_nbt",
  "jaq-core",
  "jaq-std",
