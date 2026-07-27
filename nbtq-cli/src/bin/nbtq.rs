@@ -9,7 +9,7 @@ use flate2::write::{GzDecoder, GzEncoder};
 use jaq_core::load::{Arena, Loader};
 use jaq_core::{Ctx, Vars, data, unwrap_valr};
 use nbtq_core::Val;
-use nbtq_core::nbt::{NbtCompound, NbtTag};
+use nbtq_core::nbt::{Nbt, NbtCompound, NbtTag};
 use nbtq_core::print::{QuoteMode, WriterStyles};
 
 #[derive(Parser, Debug)]
@@ -97,10 +97,10 @@ enum OutputFormat {
 }
 
 impl OutputFormat {
-    fn write(self, writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
+    fn write(self, writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
         match self {
             OutputFormat::Nbt => Self::write_nbt(writer, value),
-            OutputFormat::Snbt => Self::write_snbt(writer, value),
+            OutputFormat::Snbt => Self::write_snbt(writer, NbtTag::Compound(value.root_tag)),
             OutputFormat::Gzip | OutputFormat::Gzip6 => Self::write_gzip(6, writer, value),
             OutputFormat::Gzip1 => Self::write_gzip(1, writer, value),
             OutputFormat::Gzip2 => Self::write_gzip(2, writer, value),
@@ -114,13 +114,12 @@ impl OutputFormat {
         }
     }
 
-    fn write_nbt(writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
-        let buf = value.serialize();
-        writer.write_all(&buf)?;
+    fn write_nbt(writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
+        value.write_to_writer(writer)?;
         Ok(())
     }
 
-    fn write_gzip(level: u8, writer: &mut impl std::io::Write, value: NbtTag) -> Result<()> {
+    fn write_gzip(level: u8, writer: &mut impl std::io::Write, value: Nbt) -> Result<()> {
         let mut encoder = GzEncoder::new(writer, Compression::new(level as u32));
         Self::write_nbt(&mut encoder, value)
     }
@@ -245,7 +244,7 @@ fn main() -> Result<()> {
     let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
 
     let mut input_format = OutputFormat::Nbt;
-    let input = if input_from_args {
+    let mut input = if input_from_args {
         let Some(input) = path else {
             bail!("No input given in args.\nUsage: nbtq --args <filter> <input>");
         };
@@ -263,14 +262,19 @@ fn main() -> Result<()> {
             stdin.read_to_end(&mut input)?;
         }
 
-        NbtTag::deserialize(&mut input.as_slice())
+        Nbt::read(&mut input.as_slice())
             .or_else(|_| {
                 let decoded = Vec::new();
                 let mut decoder = GzDecoder::new(decoded);
                 decoder.write_all(&input)?;
                 input = decoder.finish().context("gzip decode failure")?;
                 input_format = OutputFormat::Gzip6;
-                NbtTag::deserialize(&mut input.as_slice()).context("failed post-ungzip parse")
+                Nbt::read(&mut input.as_slice()).context("failed post-ungzip parse")
+            })
+            .map(|nbt| {
+                NbtTag::Compound(NbtCompound {
+                    child_tags: vec![(nbt.name, nbt.root_tag.into())],
+                })
             })
             .or_else(|_| {
                 input_format = OutputFormat::Snbt;
@@ -284,11 +288,12 @@ fn main() -> Result<()> {
     };
 
     let name = 'name: {
-        if let NbtTag::Compound(compound) = &input
+        if let NbtTag::Compound(ref mut compound) = input
             && compound.child_tags.len() == 1
         {
-            let tag = &compound.child_tags[0];
+            let tag = compound.child_tags.remove(0);
             if let NbtTag::Compound(_) = &tag.1 {
+                input = tag.1;
                 break 'name Some(tag.0.clone());
             }
         }
@@ -343,9 +348,23 @@ fn main() -> Result<()> {
     };
 
     if let Some(path) = output {
-        let tag = if output_format != Some(OutputFormat::Snbt) {
-            let name = name.unwrap_or_else(|| String::new());
+        let name = name.unwrap_or_else(String::new);
 
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)?;
+
+        if output_format == Some(OutputFormat::Snbt) {
+            let tag = match out.len() {
+                0 => bail!("No values to write"),
+                1 => out.remove(0),
+                _ => NbtTag::List(out),
+            };
+
+            OutputFormat::write_snbt(&mut file, tag)?;
+        } else {
             let NbtTag::Compound(tag) = (match out.len() {
                 0 => bail!("No values to write"),
                 1 => out.remove(0),
@@ -354,24 +373,10 @@ fn main() -> Result<()> {
                 bail!("Cannot write a non-Compound value");
             };
 
-            NbtTag::Compound(NbtCompound {
-                child_tags: vec![(name, tag.into())],
-            })
-        } else {
-            match out.len() {
-                0 => bail!("No values to write"),
-                1 => out.remove(0),
-                _ => NbtTag::List(out),
-            }
+            output_format
+                .unwrap()
+                .write(&mut file, Nbt::new(name, tag))?;
         };
-
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)?;
-
-        output_format.unwrap().write(&mut file, tag)?;
 
         return Ok(());
     }
