@@ -12,9 +12,9 @@ name = "nbtq"
 nbtq-core = { path = "../nbtq-core", features = ["colours"] }
 jaq-core = "3"
 jaq-std = "3"
-flate2 = "1.1.9"
-anyhow = "1.0.102"
-clap = { version = "4.6.1", features = ["derive"] }
+flate2 = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/{ version }/nbtq-{ version }-{ target }{ archive-suffix }"

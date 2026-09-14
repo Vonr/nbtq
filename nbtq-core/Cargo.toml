@@ -4,12 +4,12 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.102"
-jaq-core = "3.1.0"
-jaq-std = "3.0.1"
+anyhow = "1"
+jaq-core = "3"
+jaq-std = "3"
 crab_nbt = { git = "https://github.com/Vonr/CrabNBT.git", branch = "nbtq" }
-owo-colors = { version = "4.3.0", optional = true, features = ["supports-colors"] }
-bytes = "1.12.0"
+owo-colors = { version = "4", optional = true, features = ["supports-colors"] }
+bytes = "1"
 
 [features]
 colours = ["dep:owo-colors"]
